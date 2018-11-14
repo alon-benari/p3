@@ -17,7 +17,7 @@ class MDSim(object):
         Mothership class for the MD simulation. 
         Parameters: 
 
-        kwargs: from CLI.
+        kwargs: parameters parsed from CLI.
 
         """
         self.read_sim_params = {}  # read from file 
@@ -36,7 +36,10 @@ class MDSim(object):
         """
         A method to compute b0 
         As per https://piazza.com/class/jligensd1qn607?cid=403
-        we compute the distance between all atoms at t = 0 and use this distnace as b0 for the simulation moving forward
+        we compute the distance between all atoms at t = 0 and use this distnace as a simulation object b0 for the simulation moving forward
+        
+        input: none
+        returns: non
         """
         self.b0 = np.zeros((self.r.shape[1], self.r.shape[1]))
         for i in range(self.r.shape[1]):
@@ -51,14 +54,12 @@ class MDSim(object):
     def parse_rvc_file(self): #, input_file):
         """
         Parses a RVC (positions/velocities/connectivities) file.
+        generates multiple simulation objects: r -  a 3 x # of atoms matrix to hold the velocities at eahc step, 
+        F 3 x # number of atom to hold Force, E_k, E_n, E_nb, objets to store enery.
 
-        Parameters: 
-        -----------
-        input_file : name of input RVC file
+        input:  none
 
-        Returns: 
-        --------
-        <This is up to you>
+        Returns: none
         """
         f = open(self.sim_params['input_file'])
         rows = f.readlines()
@@ -104,7 +105,9 @@ class MDSim(object):
 
     def  get_dist(self,atom):
       """
-      A method to return the distances from an index atom  and a mask tellig which atom need to be added to the calculation
+      A method to return the distances from an index atom  and a mask tellig which atom need to be added to the calculation given the cutoff parameter
+      input: atom id
+      return: a distnace vector and a boolean mask
 
       """
       d = self.r-self.r[:,atom].reshape(3,1) # subtract the location col from the matrix for each atom
@@ -120,7 +123,7 @@ class MDSim(object):
         """
         A method to set a vector of k across all atoms
         will return a vector of [kb, kn ....] for a given atom
-        input: inex atom  #atom
+        input: index atom  #atom
         """
         ks = np.ones(self.r.shape[1]) * self.sim_params['kN'] # fill the  vector with kN
         ks[self.bonded_atoms[atom]] = self.sim_params['kB']   # update wherever there is a bonded atom
@@ -129,10 +132,10 @@ class MDSim(object):
     
     def update_force(self,atom):
       """
-      A method to return the sum of forces acting on an index atom
-      and return a summary  in x,y,z of F
-      input index atom 
-      retunr a vector of Fx, Fy, Fz
+      A method to return the sum of forces acting on an index atom in Fx
+      and return a summary  in x,y,z of F, 
+      input: index atom 
+      return: none.
       """
       dist,mask = self.get_dist(atom)
 
@@ -142,6 +145,7 @@ class MDSim(object):
       """
       A method to decomposd the angles of x,y,z components:
       input: index atom
+      return: none
       """
       dist, mask = self.get_dist(atom)
       d = self.r-self.r[:,atom].reshape(3,1) 
@@ -149,13 +153,17 @@ class MDSim(object):
 
     def update_positions(self,atom):
       """
-      A method to update position
+      A method to update position for an index atom
+      input: index atom id
+      return: none
       """
       self.r[:,atom] += self.v[:,atom]*self.sim_params['dt'] # use half way updated speed.
 
     def update_velocities(self,atom):
       """
-      A method to update veolocities
+      A method to update veolocities for an index atom
+      input: index atom
+      return: none
       """
       self.v[:,atom] +=0.5* (1/float(self.sim_params['mass']))*self.F[:,atom]*self.sim_params['dt']
       
@@ -163,6 +171,8 @@ class MDSim(object):
     def update_kinetic_energy(self):
       """
       A method to return the kinetic energy for the system
+      input none:
+      return a 1 x # number of atoms with kinetic energy for each atom
       """
       return np.sum(0.5*self.sim_params['mass']*((self.v*self.v).sum(axis=0)))
 
@@ -170,6 +180,8 @@ class MDSim(object):
       """
       A method to output potential and bonded and non bonded energy
       It basically iterates of the atoms  and sums up the potential energy between bonded and non bonded pairs.
+      input: none
+      returns: vectors for bonded and non bonded energies
       """
       E_b = 0
       E_nb = 0
@@ -185,11 +197,18 @@ class MDSim(object):
       return E_b*0.5 ,E_nb*0.5
 
     def update_total_energy(self):
+      """
+      method to compute total energy in teh system
+      input: none
+      return: none
+      """
       self.E_tot = self.E_k+self.E_nb+self.E_b
 
     def do_verlet_iteration(self, step):
       """
       A method to carry out the verlet iteration
+      input: timestep in the iteration
+      return: none
       """
       for atom in self.num_atoms:
         self.update_velocities(atom)
@@ -212,7 +231,7 @@ class MDSim(object):
       """
       A method to return a matrix ready for plotting with 4 digits after the decimal point
       input: none
-      return: formatted location and velocity matrices 
+      return: formatted location and velocity matrices ready for printing
       """
       shape = self.v.shape
       V = self.v.copy()
@@ -225,7 +244,8 @@ class MDSim(object):
     def update_output_row(self,step):
       """
       A method to update the output row that will be outputed to the file
-      input: step  in the iteration.
+      input: timestep  in the iteration.
+      return: none
       """
       r,v = self.format_float()
       data_row = [l.tolist() for l in np.concatenate((r,v),axis=0)[:,1:].T]
@@ -237,6 +257,7 @@ class MDSim(object):
     def format_text_row(self,step):
       """
       A method to  format the  text update line in the output file
+      input: time step in the simulation
       """ 
       text_row = "#At time step %d,energy = %1.3fkJ"% (step,self.E_tot[step])
       self.output_row.append([text_row])
@@ -244,6 +265,8 @@ class MDSim(object):
     def format_header(self):
       """
       A method to  insert a header line in the files
+      input: none
+      output: none
       """
       header = "# %s: kB=%.1f kN=%.1f  nbCutoff=%.2f dt=%.4f  mass=%.2f  T=%.2f" % (self.sim_params['input_file'].split('.')[0], self.sim_params['kB'], self.sim_params['kN'],self.sim_params['nbCutoff'], self.sim_params['dt'], self.sim_params['mass'],self.sim_params['T'])
 
@@ -260,24 +283,19 @@ class MDSim(object):
     def update_energy_trace(self,step):
       """
       A method to update the  Energy tracing
+      input: time step of energy
+      return: none
       """
       self.energetics.append([step,self.e2float(self.E_k[step]),self.e2float(self.E_b[step]), self.e2float(self.E_nb[step]), self.e2float(self.E_tot[step])])
 
 
     def write_rvc_output(self): #, iter_num): #, file_handle):
         """
-        Writes current atom positions and velocities, as well as the iteration
-        number, to an output file given by file_handle.
+        Writes current atom positions and velocities
 
-        Parameters: 
-        -----------
-        iter_num : int, current iteration number.
-        file_handle : handle to *_out.rvc file opened for writing
-                      (*NOT* file name)
+        input: none
 
-        Returns:
-        --------
-        None        
+        output: non
         """
         tab_output = self.sim_params['out']+'.rvc'
         with open(tab_output, 'w') as f:
@@ -291,15 +309,8 @@ class MDSim(object):
         and the sum of the foregoing energies - E_tot) as well as the iteration
         number to an output file given by file_handle.
 
-        Parameters: 
-        -----------
-        iter_num : int, current iteration number.
-        file_handle : handle to *_out.erg file opened for writing 
-                     (*NOT* file name)
-
-        Returns:
-        --------
-        None
+       input: none
+       return: none.
         """
         tab_energy = self.sim_params['out']+'.erg'
         with open(tab_energy, 'w') as f:
@@ -309,6 +320,8 @@ class MDSim(object):
     def run_md_sim(self):
         """
         Runs the MD simulation. 
+        input none
+        return none
         """
         time_stamps = [ i for i in range(10,self.sim_params['n']+10,10)]
         for i in range(1,self.sim_params['n']+1):
